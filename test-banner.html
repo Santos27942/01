@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste - Banner de Notificação</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>Teste - Banner de Notificação</h1>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Testar Banner de Notificação</h5>
+                    </div>
+                    <div class="card-body">
+                        <button class="btn btn-success mb-2" onclick="testBanner('Espaguete Clássico', 1)">
+                            <i class="fas fa-plus"></i> Adicionar Espaguete Clássico
+                        </button>
+                        <br>
+                        <button class="btn btn-primary mb-2" onclick="testBanner('Espaguete Duetos de Molhos', 2)">
+                            <i class="fas fa-plus"></i> Adicionar 2x Espaguete Duetos
+                        </button>
+                        <br>
+                        <button class="btn btn-warning mb-2" onclick="testBanner('Macarrão Customizado (Adicionais: Bacon, Calabresa)', 1)">
+                            <i class="fas fa-plus"></i> Adicionar Macarrão Customizado
+                        </button>
+                        <br>
+                        <button class="btn btn-info" onclick="closeItemBanner()">
+                            <i class="fas fa-times"></i> Fechar Banner Manualmente
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Informações do Banner</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul>
+                            <li><strong>Posição:</strong> Topo da tela, centralizado</li>
+                            <li><strong>Duração:</strong> 3 segundos (auto-hide)</li>
+                            <li><strong>Animação:</strong> Slide in/out suave</li>
+                            <li><strong>Cores:</strong> Verde gradiente</li>
+                            <li><strong>Responsivo:</strong> Adapta-se a diferentes telas</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Banner de Notificação de Item Adicionado -->
+    <div id="item-added-banner" class="item-added-banner">
+        <div class="banner-content">
+            <div class="banner-icon">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <div class="banner-text">
+                <h4>Item Adicionado!</h4>
+                <p id="banner-item-name">Item adicionado ao carrinho</p>
+            </div>
+            <button class="banner-close" onclick="closeItemBanner()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    
+    <script>
+        // Banner de notificação de item adicionado
+        function showItemAddedBanner(itemName, quantity = 1) {
+            const banner = document.getElementById('item-added-banner');
+            const itemNameElement = document.getElementById('banner-item-name');
+            
+            // Atualiza o texto do banner
+            if (quantity > 1) {
+                itemNameElement.textContent = `${quantity}x ${itemName} adicionado ao carrinho`;
+            } else {
+                itemNameElement.textContent = `${itemName} adicionado ao carrinho`;
+            }
+            
+            // Mostra o banner
+            banner.classList.remove('hide');
+            banner.classList.add('show');
+            
+            // Auto-hide após 3 segundos
+            setTimeout(() => {
+                closeItemBanner();
+            }, 3000);
+        }
+
+        // Fecha o banner de notificação
+        function closeItemBanner() {
+            const banner = document.getElementById('item-added-banner');
+            banner.classList.remove('show');
+            banner.classList.add('hide');
+            
+            // Remove a classe hide após a animação
+            setTimeout(() => {
+                banner.classList.remove('hide');
+            }, 300);
+        }
+
+        // Função de teste
+        function testBanner(itemName, quantity) {
+            showItemAddedBanner(itemName, quantity);
+        }
+    </script>
+</body>
+</html> 

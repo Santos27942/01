@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teste - Botão de Localização</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1>Teste - Botão de Localização Melhorado</h1>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Formulário de Endereço</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label>Endereço Completo *</label>
+                            <div class="address-input-group">
+                                <input type="text" class="form-control" id="clientAddress" required placeholder="Digite seu endereço completo">
+                                <button type="button" class="btn btn-location" onclick="testGetLocation()" title="Usar minha localização atual" data-toggle="tooltip" data-placement="top">
+                                    <i class="fas fa-map-marker-alt"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group location-fields" style="display: none;">
+                            <label>Localização Exata</label>
+                            <div class="location-info">
+                                <input type="text" class="form-control" id="latitude" readonly placeholder="Latitude">
+                                <input type="text" class="form-control" id="longitude" readonly placeholder="Longitude">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>Estados do Botão</h5>
+                    </div>
+                    <div class="card-body">
+                        <button class="btn btn-location mb-2" onclick="testState('normal')">
+                            <i class="fas fa-map-marker-alt"></i> Normal
+                        </button>
+                        <br>
+                        <button class="btn btn-location loading mb-2" onclick="testState('loading')">
+                            <i class="fas fa-spinner fa-spin"></i> Loading
+                        </button>
+                        <br>
+                        <button class="btn btn-location success mb-2" onclick="testState('success')">
+                            <i class="fas fa-check"></i> Sucesso
+                        </button>
+                        <br>
+                        <button class="btn btn-location error mb-2" onclick="testState('error')">
+                            <i class="fas fa-exclamation-triangle"></i> Erro
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    
+    <script>
+        // Inicializa tooltips
+        $(document).ready(function() {
+            $('[data-toggle="tooltip"]').tooltip();
+        });
+
+        // Função de teste para localização
+        function testGetLocation() {
+            if (navigator.geolocation) {
+                const locationBtn = document.querySelector('.btn-location');
+                
+                // Adiciona classe de loading e animação
+                locationBtn.classList.add('loading');
+                locationBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                locationBtn.title = 'Buscando localização...';
+                
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const { latitude, longitude } = position.coords;
+                        
+                        // Atualiza os campos
+                        document.getElementById('latitude').value = latitude;
+                        document.getElementById('longitude').value = longitude;
+                        
+                        // Mostra os campos de localização
+                        document.querySelector('.location-fields').style.display = 'block';
+                        
+                        // Adiciona link do Google Maps ao endereço
+                        const mapsLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
+                        const locationInfo = `📍 Localização exata: ${mapsLink}`;
+                        
+                        // Adiciona ao campo de endereço
+                        const addressField = document.getElementById('clientAddress');
+                        if (!addressField.value.includes('maps')) {
+                            addressField.value += `\n${locationInfo}`;
+                        }
+                        
+                        // Feedback de sucesso
+                        locationBtn.classList.remove('loading');
+                        locationBtn.classList.add('success');
+                        locationBtn.innerHTML = '<i class="fas fa-check"></i>';
+                        locationBtn.title = 'Localização obtida com sucesso!';
+                        
+                        // Restaura o ícone após 2 segundos
+                        setTimeout(() => {
+                            locationBtn.innerHTML = '<i class="fas fa-map-marker-alt"></i>';
+                            locationBtn.title = 'Usar minha localização atual';
+                            locationBtn.classList.remove('success');
+                        }, 2000);
+                        
+                    },
+                    (error) => {
+                        let message = 'Erro ao obter localização';
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                message = 'Permissão negada para acessar localização';
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                message = 'Localização indisponível';
+                                break;
+                            case error.TIMEOUT:
+                                message = 'Tempo esgotado ao buscar localização';
+                                break;
+                        }
+                        
+                        // Feedback de erro
+                        locationBtn.classList.remove('loading');
+                        locationBtn.classList.add('error');
+                        locationBtn.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
+                        locationBtn.title = message;
+                        
+                        // Mostra alerta
+                        alert(message);
+                        
+                        // Restaura o ícone após 3 segundos
+                        setTimeout(() => {
+                            locationBtn.innerHTML = '<i class="fas fa-map-marker-alt"></i>';
+                            locationBtn.title = 'Usar minha localização atual';
+                            locationBtn.classList.remove('error');
+                        }, 3000);
+                    }
+                );
+            } else {
+                alert('Seu navegador não suporta geolocalização');
+            }
+        }
+
+        // Função para testar estados do botão
+        function testState(state) {
+            const btn = event.target;
+            btn.classList.remove('normal', 'loading', 'success', 'error');
+            btn.classList.add(state);
+            
+            switch(state) {
+                case 'normal':
+                    btn.innerHTML = '<i class="fas fa-map-marker-alt"></i> Normal';
+                    btn.title = 'Usar minha localização atual';
+                    break;
+                case 'loading':
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading';
+                    btn.title = 'Buscando localização...';
+                    break;
+                case 'success':
+                    btn.innerHTML = '<i class="fas fa-check"></i> Sucesso';
+                    btn.title = 'Localização obtida com sucesso!';
+                    break;
+                case 'error':
+                    btn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Erro';
+                    btn.title = 'Erro ao obter localização';
+                    break;
+            }
+        }
+    </script>
+</body>
+</html> 
