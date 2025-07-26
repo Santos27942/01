@@ -6,6 +6,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cardápio Digital - Espaguete da Casa</title>
     
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Espaguete da Casa">
+    <meta name="description" content="Cardápio digital do Espaguete da Casa - Itapoã, Fazendinha">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icon-192x192.png">
+    
+    <!-- Preload critical resources -->
+    <link rel="preload" href="styles.css" as="style">
+    <link rel="preload" href="scripts.js" as="script">
+    
     <!-- Links CSS externos -->
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap">
@@ -15,12 +30,37 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- Toggle de Modo Escuro -->
+    <div class="theme-toggle">
+        <button id="theme-toggle" class="theme-btn" title="Alternar Modo Escuro">
+            <i class="fas fa-moon"></i>
+        </button>
+    </div>
+
+    <!-- Loading Skeleton -->
+    <div id="loading-skeleton" class="loading-skeleton">
+        <div class="skeleton-header"></div>
+        <div class="skeleton-search"></div>
+        <div class="skeleton-categories">
+            <div class="skeleton-category"></div>
+            <div class="skeleton-category"></div>
+            <div class="skeleton-category"></div>
+        </div>
+        <div class="skeleton-items">
+            <div class="skeleton-item"></div>
+            <div class="skeleton-item"></div>
+            <div class="skeleton-item"></div>
+        </div>
+    </div>
+
     <div id="welcome-banner" class="welcome-banner">
         <div class="welcome-content">
             <h2>Bem-vindo ao Espaguete da Casa!</h2>
+            <p>🍝 Os melhores espaguetes da região!</p>
             <button id="close-welcome" class="welcome-btn">Entrar</button>
         </div>
     </div>
+    
     <!-- Adicione este botão do carrinho no topo da página -->
     <div class="cart-icon" onclick="toggleCart()">
         <i class="fas fa-shopping-cart"></i>
@@ -120,6 +160,9 @@
     <div class="search-bar">
         <i class="fas fa-search"></i>
         <input type="text" placeholder="Pesquisar no cardápio">
+        <button class="favorites-btn" onclick="toggleFavorites()" title="Mostrar Favoritos">
+            <i class="fas fa-heart"></i>
+        </button>
     </div>
 
     <!-- Categorias -->
@@ -159,7 +202,12 @@
                 <div class="menu-item">
                     <img src="Imagem do WhatsApp de 2025-07-10 à(s) 00.27.31_75041b01.jpg" class="card-img-top">
                     <div class="item-info">
-                        <h3>Espaguete Clássico</h3>
+                        <div class="item-header">
+                            <h3>Espaguete Clássico</h3>
+                            <button class="favorite-btn" data-item="Espaguete Clássico" onclick="toggleFavoriteItem('Espaguete Clássico')">
+                                <i class="far fa-heart"></i>
+                            </button>
+                        </div>
                         <p class="description">Espaguete almoedas, molho italiano, bacon, presunto, azeitona, calabresa, creme de queijo.</p>
                         <div class="price-action">
                             <span class="price">R$ 25,99</span>

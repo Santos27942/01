@@ -8,6 +8,148 @@ let currentCategory = 'macarrao-750g';
 let cartItems = [];
 let cartTotal = 0;
 
+// PWA Service Worker Registration
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+                console.log('SW registered: ', registration);
+            })
+            .catch((registrationError) => {
+                console.log('SW registration failed: ', registrationError);
+            });
+    });
+}
+
+// Theme Management
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    updateThemeIcon(newTheme);
+}
+
+function updateThemeIcon(theme) {
+    const themeBtn = document.getElementById('theme-toggle');
+    const icon = themeBtn.querySelector('i');
+    
+    if (theme === 'dark') {
+        icon.className = 'fas fa-sun';
+        themeBtn.title = 'Alternar para Modo Claro';
+    } else {
+        icon.className = 'fas fa-moon';
+        themeBtn.title = 'Alternar para Modo Escuro';
+    }
+}
+
+// Loading Management
+function hideLoadingSkeleton() {
+    const skeleton = document.getElementById('loading-skeleton');
+    if (skeleton) {
+        skeleton.classList.add('hidden');
+        setTimeout(() => {
+            skeleton.style.display = 'none';
+        }, 300);
+    }
+}
+
+// Lazy Loading Images
+function initLazyLoading() {
+    const images = document.querySelectorAll('img[data-src]');
+    const imageObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const img = entry.target;
+                img.src = img.dataset.src;
+                img.classList.remove('lazy');
+                imageObserver.unobserve(img);
+            }
+        });
+    });
+
+    images.forEach(img => imageObserver.observe(img));
+}
+
+// Favorites System
+let favorites = JSON.parse(localStorage.getItem('favorites')) || [];
+let showingFavorites = false;
+
+function toggleFavorites() {
+    const favoritesBtn = document.querySelector('.favorites-btn');
+    showingFavorites = !showingFavorites;
+    
+    if (showingFavorites) {
+        showFavorites();
+        favoritesBtn.classList.add('active');
+    } else {
+        showAllItems();
+        favoritesBtn.classList.remove('active');
+    }
+}
+
+function showFavorites() {
+    document.querySelectorAll('.menu-item').forEach(item => {
+        const itemName = item.querySelector('h3').textContent;
+        if (favorites.includes(itemName)) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+    
+    // Atualiza categorias
+    document.querySelectorAll('.category-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+}
+
+function showAllItems() {
+    document.querySelectorAll('.menu-item').forEach(item => {
+        item.style.display = 'block';
+    });
+    
+    // Restaura categoria ativa
+    const activeCategory = document.querySelector('.category-btn.active');
+    if (activeCategory) {
+        changeCategory(activeCategory.dataset.category);
+    }
+}
+
+function toggleFavoriteItem(itemName) {
+    const index = favorites.indexOf(itemName);
+    if (index > -1) {
+        favorites.splice(index, 1);
+    } else {
+        favorites.push(itemName);
+    }
+    
+    localStorage.setItem('favorites', JSON.stringify(favorites));
+    updateFavoriteButtons();
+}
+
+function updateFavoriteButtons() {
+    document.querySelectorAll('.favorite-btn').forEach(btn => {
+        const itemName = btn.dataset.item;
+        const icon = btn.querySelector('i');
+        
+        if (favorites.includes(itemName)) {
+            icon.className = 'fas fa-heart';
+            btn.classList.add('active');
+        } else {
+            icon.className = 'far fa-heart';
+            btn.classList.remove('active');
+        }
+    });
+}
+
 // Função para trocar de categoria
 function changeCategory(category) {
     // Remove active de todas as categorias
@@ -1075,6 +1217,16 @@ function limparSelecoesCustom() {
 
 // Event listeners para Monte Seu Macarrão
 document.addEventListener('DOMContentLoaded', function() {
+    // Inicializa tema e funcionalidades
+    initTheme();
+    initLazyLoading();
+    
+    // Event listener para toggle de tema
+    const themeToggle = document.getElementById('theme-toggle');
+    if (themeToggle) {
+        themeToggle.addEventListener('click', toggleTheme);
+    }
+    
     // Event listeners para seleção de adicionais
     document.querySelectorAll('.adicional-item').forEach(item => {
         const checkbox = item.querySelector('input[type="checkbox"]');
@@ -1092,6 +1244,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Inicializa o display do preço
     calcularTotalCustom();
+    
+    // Esconde o skeleton loading após carregamento
+    setTimeout(hideLoadingSkeleton, 1000);
+    
+    // Inicializa favoritos
+    updateFavoriteButtons();
 });
 
 // Função para mostrar banner de limite
