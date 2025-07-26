@@ -5,11 +5,12 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, MetaQuotes Ltd."
 #property link      "https://www.mql5.com"
-#property version   "1.01"
-#property description "Expert Advisor com RSI, Grid Trading e Trailing Stop"
+#property version   "2.00"
+#property description "Expert Advisor Profissional com RSI, Grid Trading, Trailing Stop e Gestão de Risco Avançada"
 
 #include <Controls\Dialog.mqh>
 #include <Controls\Funçoes.mqh>
+#include <Trade\Trade.mqh>
 
 //+------------------------------------------------------------------+
 //| Enums                                                             |
@@ -31,6 +32,12 @@ enum ENUM_TIPO_MA {
    LWMA = 3    // Média Móvel Ponderada
 };
 
+enum ENUM_RISK_MODE {
+   RISK_FIXED = 0,      // Risco Fixo
+   RISK_PERCENT = 1,    // Risco Percentual
+   RISK_MARTINGALE = 2  // Martingale
+};
+
 //+------------------------------------------------------------------+
 //| Input Parameters                                                  |
 //+------------------------------------------------------------------+
@@ -39,6 +46,7 @@ input double trade_volume = 0.01;    // Volume
 input int alvo = 100;               // Take Profit (points)
 input int stop_loss = 100;          // Stop Loss (points)
 input int magic_number = 123456;    // Magic Number
+input ENUM_RISK_MODE risk_mode = RISK_FIXED; // Modo de Risco
 
 input group "=== Configurações de Trailing Stop ==="
 input ENUM_TRAILING_MODE usar_trailing = TRAIL_SIM; // Usar Trailing Stop?
@@ -64,6 +72,19 @@ input group "=== Configurações de Segurança ==="
 input int max_positions = 50;       // Máximo de Posições
 input double max_daily_loss = -100.0; // Perda Máxima Diária
 input double max_daily_profit = 500.0; // Lucro Máximo Diário
+input double max_risk_percent = 2.0; // Risco Máximo (% da conta)
+
+input group "=== Configurações de Alerta ==="
+input bool enable_alerts = true;    // Ativar Alertas
+input bool enable_email = false;    // Ativar Email
+input bool enable_push = false;     // Ativar Push Notifications
+
+input group "=== Configurações de Otimização ==="
+input bool enable_backtest = false; // Modo Backtest
+input int max_spread = 50;          // Spread Máximo (points)
+input bool check_news = true;       // Verificar Notícias
+input int news_before = 30;         // Minutos Antes da Notícia
+input int news_after = 30;          // Minutos Após a Notícia
 
 //+------------------------------------------------------------------+
 //| Global Variables                                                  |
@@ -73,6 +94,23 @@ double point;
 datetime lastBar = 0;
 double dailyProfit = 0.0;
 datetime lastDayReset = 0;
+CTrade trade;
+bool isNewsTime = false;
+datetime lastNewsCheck = 0;
+
+// Statistics
+struct STATS {
+   int total_trades;
+   int winning_trades;
+   int losing_trades;
+   double total_profit;
+   double max_profit;
+   double max_loss;
+   double win_rate;
+   datetime start_time;
+};
+
+STATS stats;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                     |
@@ -81,6 +119,11 @@ int OnInit()
 {
    // Initialize point value
    point = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+   
+   // Initialize trade object
+   trade.SetExpertMagicNumber(magic_number);
+   trade.SetDeviationInPoints(10);
+   trade.SetTypeFilling(ORDER_FILLING_FOK);
    
    // Validate input parameters
    if(!ValidateInputs()) {
@@ -101,11 +144,18 @@ int OnInit()
       }
    }
    
+   // Initialize statistics
+   InitializeStats();
+   
    // Reset daily profit
    ResetDailyProfit();
    
-   Print("Expert Advisor inicializado com sucesso");
+   Print("=== REFORMA EA v2.00 ===");
    Print("Símbolo: ", _Symbol, " | Volume: ", trade_volume, " | Magic: ", magic_number);
+   Print("Modo de Risco: ", EnumToString(risk_mode));
+   Print("Grid Trading: ", (usar_grid == GRID_SIM ? "Ativo" : "Inativo"));
+   Print("Trailing Stop: ", (usar_trailing == TRAIL_SIM ? "Ativo" : "Inativo"));
+   Print("RSI: ", (ativa_rsi ? "Ativo" : "Inativo"));
    
    return(INIT_SUCCEEDED);
 }
@@ -118,6 +168,9 @@ void OnDeinit(const int reason)
    if(rsiHandle != INVALID_HANDLE) {
       IndicatorRelease(rsiHandle);
    }
+   
+   // Print final statistics
+   PrintFinalStats();
    
    Comment("");
    Print("Expert Advisor finalizado. Razão: ", reason);
@@ -133,6 +186,16 @@ void OnTick()
    
    // Check daily limits
    if(!CheckDailyLimits()) {
+      return;
+   }
+   
+   // Check spread
+   if(!CheckSpread()) {
+      return;
+   }
+   
+   // Check news time
+   if(check_news && IsNewsTime()) {
       return;
    }
    
@@ -197,6 +260,11 @@ bool ValidateInputs()
       return false;
    }
    
+   if(max_risk_percent <= 0 || max_risk_percent > 10) {
+      Print("Erro: Risco percentual deve estar entre 0.1% e 10%");
+      return false;
+   }
+   
    return true;
 }
 
@@ -214,6 +282,82 @@ bool GetRSIValues(double &rsiValues[])
 }
 
 //+------------------------------------------------------------------+
+//| Check spread                                                      |
+//+------------------------------------------------------------------+
+bool CheckSpread()
+{
+   long spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
+   if(spread > max_spread) {
+      if(enable_alerts) {
+         Alert("Spread muito alto: ", spread, " points");
+      }
+      return false;
+   }
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Check if it's news time                                          |
+//+------------------------------------------------------------------+
+bool IsNewsTime()
+{
+   // Simple news time check (you can implement more sophisticated news checking)
+   datetime currentTime = TimeCurrent();
+   int currentHour = TimeHour(currentTime);
+   
+   // Avoid trading during major news times (example: 8:00-9:00 and 14:00-15:00)
+   if((currentHour >= 8 && currentHour < 9) || (currentHour >= 14 && currentHour < 15)) {
+      if(!isNewsTime) {
+         isNewsTime = true;
+         if(enable_alerts) {
+            Print("Período de notícias - Trading pausado");
+         }
+      }
+      return true;
+   } else {
+      if(isNewsTime) {
+         isNewsTime = false;
+         if(enable_alerts) {
+            Print("Período de notícias finalizado - Trading retomado");
+         }
+      }
+      return false;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Calculate position size based on risk mode                       |
+//+------------------------------------------------------------------+
+double CalculatePositionSize()
+{
+   double size = trade_volume;
+   
+   switch(risk_mode) {
+      case RISK_PERCENT:
+         double accountBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+         double riskAmount = accountBalance * (max_risk_percent / 100.0);
+         double tickValue = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
+         size = riskAmount / (stop_loss * tickValue);
+         break;
+         
+      case RISK_MARTINGALE:
+         int totalPositions = QuantidadeDePosicoesTotal(_Symbol);
+         if(totalPositions > 0) {
+            size = trade_volume * MathPow(multiplicador, totalPositions);
+         }
+         break;
+   }
+   
+   // Ensure minimum and maximum position size
+   double minVolume = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+   double maxVolume = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+   
+   size = MathMax(minVolume, MathMin(maxVolume, size));
+   
+   return NormalizeDouble(size, 2);
+}
+
+//+------------------------------------------------------------------+
 //| Execute trading logic                                             |
 //+------------------------------------------------------------------+
 void ExecuteTradingLogic(const double &rsiValues[])
@@ -223,25 +367,29 @@ void ExecuteTradingLogic(const double &rsiValues[])
       return;
    }
    
+   double positionSize = CalculatePositionSize();
+   
    if(ativa_rsi) {
-      ExecuteRSITrading(rsiValues);
+      ExecuteRSITrading(rsiValues, positionSize);
    } else {
-      ExecutePatternTrading();
+      ExecutePatternTrading(positionSize);
    }
 }
 
 //+------------------------------------------------------------------+
 //| Execute RSI-based trading                                         |
 //+------------------------------------------------------------------+
-void ExecuteRSITrading(const double &rsiValues[])
+void ExecuteRSITrading(const double &rsiValues[], double positionSize)
 {
    // Sell signal: RSI above overbought level with bearish pattern
    if(rsiValues[0] > nivel_sobrecompra && 
       vela_de_baixa(1) && vela_de_auta(2) && vela_de_auta(3) && vela_de_auta(4) && 
       QuantidadeDePosicoesTotal(_Symbol) == 0) {
       
-      if(Venda_a_mercado(trade_volume, _Symbol, stop_loss, alvo, true, true, true, magic_number)) {
-         Print("Venda executada - RSI sobrecomprado: ", rsiValues[0]);
+      if(Venda_a_mercado(positionSize, _Symbol, stop_loss, alvo, true, true, true, magic_number)) {
+         Print("Venda executada - RSI sobrecomprado: ", rsiValues[0], " | Volume: ", positionSize);
+         UpdateStats(true, 0);
+         SendAlert("Venda executada", "RSI sobrecomprado: " + DoubleToString(rsiValues[0], 2));
       }
    }
    
@@ -250,8 +398,10 @@ void ExecuteRSITrading(const double &rsiValues[])
       vela_de_auta(1) && vela_de_baixa(2) && vela_de_baixa(3) && vela_de_baixa(4) && 
       QuantidadeDePosicoesTotal(_Symbol) == 0) {
       
-      if(Compra_a_mercado(trade_volume, _Symbol, stop_loss, alvo, true, true, true, magic_number)) {
-         Print("Compra executada - RSI sobrevendido: ", rsiValues[0]);
+      if(Compra_a_mercado(positionSize, _Symbol, stop_loss, alvo, true, true, true, magic_number)) {
+         Print("Compra executada - RSI sobrevendido: ", rsiValues[0], " | Volume: ", positionSize);
+         UpdateStats(true, 0);
+         SendAlert("Compra executada", "RSI sobrevendido: " + DoubleToString(rsiValues[0], 2));
       }
    }
 }
@@ -259,14 +409,16 @@ void ExecuteRSITrading(const double &rsiValues[])
 //+------------------------------------------------------------------+
 //| Execute pattern-based trading                                     |
 //+------------------------------------------------------------------+
-void ExecutePatternTrading()
+void ExecutePatternTrading(double positionSize)
 {
    // Sell signal: bearish pattern
    if(vela_de_baixa(1) && vela_de_auta(2) && vela_de_auta(3) && vela_de_auta(4) && 
       QuantidadeDePosicoesTotal(_Symbol) == 0) {
       
-      if(Venda_a_mercado(trade_volume, _Symbol, stop_loss, alvo, true, true, true, magic_number)) {
-         Print("Venda executada - Padrão de baixa");
+      if(Venda_a_mercado(positionSize, _Symbol, stop_loss, alvo, true, true, true, magic_number)) {
+         Print("Venda executada - Padrão de baixa | Volume: ", positionSize);
+         UpdateStats(true, 0);
+         SendAlert("Venda executada", "Padrão de baixa identificado");
       }
    }
    
@@ -274,8 +426,10 @@ void ExecutePatternTrading()
    if(vela_de_auta(1) && vela_de_baixa(2) && vela_de_baixa(3) && vela_de_baixa(4) && 
       QuantidadeDePosicoesTotal(_Symbol) == 0) {
       
-      if(Compra_a_mercado(trade_volume, _Symbol, stop_loss, alvo, true, true, true, magic_number)) {
-         Print("Compra executada - Padrão de alta");
+      if(Compra_a_mercado(positionSize, _Symbol, stop_loss, alvo, true, true, true, magic_number)) {
+         Print("Compra executada - Padrão de alta | Volume: ", positionSize);
+         UpdateStats(true, 0);
+         SendAlert("Compra executada", "Padrão de alta identificado");
       }
    }
 }
@@ -304,6 +458,8 @@ void ExecuteGridLogic()
       if(totalProfit >= saida_lucro || totalProfit <= saida_prejuizo) {
          if(ApagarTodasAsPosiçoes(_Symbol)) {
             Print("Todas as posições fechadas - Lucro: ", totalProfit);
+            UpdateStats(false, totalProfit);
+            SendAlert("Grid fechado", "Lucro: " + DoubleToString(totalProfit, 2));
          }
       }
    }
@@ -317,6 +473,81 @@ void ExecuteTrailingStop()
    if(QuantidadeDePosicoesTotal(_Symbol) == 1) {
       TrailingStopGlobal(trailing_space, trailing_start);
    }
+}
+
+//+------------------------------------------------------------------+
+//| Initialize statistics                                              |
+//+------------------------------------------------------------------+
+void InitializeStats()
+{
+   stats.total_trades = 0;
+   stats.winning_trades = 0;
+   stats.losing_trades = 0;
+   stats.total_profit = 0.0;
+   stats.max_profit = 0.0;
+   stats.max_loss = 0.0;
+   stats.win_rate = 0.0;
+   stats.start_time = TimeCurrent();
+}
+
+//+------------------------------------------------------------------+
+//| Update statistics                                                 |
+//+------------------------------------------------------------------+
+void UpdateStats(bool isNewTrade, double profit)
+{
+   if(isNewTrade) {
+      stats.total_trades++;
+   } else {
+      stats.total_profit += profit;
+      
+      if(profit > 0) {
+         stats.winning_trades++;
+         if(profit > stats.max_profit) stats.max_profit = profit;
+      } else {
+         stats.losing_trades++;
+         if(profit < stats.max_loss) stats.max_loss = profit;
+      }
+      
+      if(stats.total_trades > 0) {
+         stats.win_rate = (double)stats.winning_trades / stats.total_trades * 100.0;
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Print final statistics                                            |
+//+------------------------------------------------------------------+
+void PrintFinalStats()
+{
+   Print("=== ESTATÍSTICAS FINAIS ===");
+   Print("Total de Trades: ", stats.total_trades);
+   Print("Trades Vencedores: ", stats.winning_trades);
+   Print("Trades Perdedores: ", stats.losing_trades);
+   Print("Taxa de Acerto: ", DoubleToString(stats.win_rate, 2), "%");
+   Print("Lucro Total: ", DoubleToString(stats.total_profit, 2));
+   Print("Maior Lucro: ", DoubleToString(stats.max_profit, 2));
+   Print("Maior Perda: ", DoubleToString(stats.max_loss, 2));
+   Print("Tempo de Execução: ", TimeToString(TimeCurrent() - stats.start_time));
+}
+
+//+------------------------------------------------------------------+
+//| Send alert                                                        |
+//+------------------------------------------------------------------+
+void SendAlert(string title, string message)
+{
+   if(!enable_alerts) return;
+   
+   string fullMessage = "REFORMA EA - " + title + ": " + message;
+   
+   if(enable_email) {
+      SendMail("REFORMA EA Alert", fullMessage);
+   }
+   
+   if(enable_push) {
+      SendNotification(fullMessage);
+   }
+   
+   Alert(fullMessage);
 }
 
 //+------------------------------------------------------------------+
@@ -350,12 +581,14 @@ bool CheckDailyLimits()
    // Check daily loss limit
    if(currentProfit <= max_daily_loss) {
       Print("Limite de perda diária atingido: ", currentProfit);
+      SendAlert("Limite Diário", "Perda máxima atingida: " + DoubleToString(currentProfit, 2));
       return false;
    }
    
    // Check daily profit limit
    if(currentProfit >= max_daily_profit) {
       Print("Limite de lucro diário atingido: ", currentProfit);
+      SendAlert("Limite Diário", "Lucro máximo atingido: " + DoubleToString(currentProfit, 2));
       return false;
    }
    
@@ -368,17 +601,20 @@ bool CheckDailyLimits()
 void UpdateComment()
 {
    string comment = "";
-   comment += "=== REFORMA EA ===\n";
+   comment += "=== REFORMA EA v2.00 ===\n";
    comment += "Símbolo: " + _Symbol + "\n";
-   comment += "Volume: " + DoubleToString(trade_volume, 2) + "\n";
+   comment += "Volume: " + DoubleToString(CalculatePositionSize(), 2) + "\n";
    comment += "Posições: " + QuantidadeDePosicoesTotal(_Symbol) + "\n";
    comment += "Compras: " + QuantidadeDePosicoesDecompra(_Symbol) + "\n";
    comment += "Vendas: " + QuantidadeDePosicoesDeVenda(_Symbol) + "\n";
    comment += "Lucro: " + DoubleToString(CalculateOpenPositionsProfit(), 2) + "\n";
    comment += "Lucro Diário: " + DoubleToString(dailyProfit, 2) + "\n";
+   comment += "Taxa de Acerto: " + DoubleToString(stats.win_rate, 1) + "%\n";
    comment += "Grid: " + (usar_grid == GRID_SIM ? "Ativo" : "Inativo") + "\n";
    comment += "Trailing: " + (usar_trailing == TRAIL_SIM ? "Ativo" : "Inativo") + "\n";
-   comment += "RSI: " + (ativa_rsi ? "Ativo" : "Inativo");
+   comment += "RSI: " + (ativa_rsi ? "Ativo" : "Inativo") + "\n";
+   comment += "Risco: " + EnumToString(risk_mode) + "\n";
+   comment += "Spread: " + IntegerToString(SymbolInfoInteger(_Symbol, SYMBOL_SPREAD));
    
    Comment(comment);
 }
